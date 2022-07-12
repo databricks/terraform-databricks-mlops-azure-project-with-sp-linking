@@ -9,7 +9,7 @@ The service principals are granted `CAN_MANAGE` permissions on the created works
 **_NOTE:_** 
 1. This module is in preview so it is still experimental and subject to change. Feedback is welcome!
 2. The [Databricks providers](https://registry.terraform.io/providers/databricks/databricks/latest/docs) that are passed into the module should be configured with workspace admin permissions.
-3. The module assumes that one of the two Azure Infrastructure Modules has already been applied, namely that service principal groups with token usage permissions have been created with the name `"mlops-service-principals"`.
+3. The module assumes that one of the two Azure Infrastructure Modules (with [Creation](https://registry.terraform.io/modules/databricks/mlops-azure-infrastructure-with-sp-creation/databricks/latest) or [Linking](https://registry.terraform.io/modules/databricks/mlops-azure-infrastructure-with-sp-linking/databricks/latest)) has already been applied, namely that service principal groups with token usage permissions have been created with the default name `"mlops-service-principals"` or by specifying the `service_principal_group_name` field.
 4. The service principal AAD tokens are short-lived (<60 minutes in most cases). If a long-lived token is desired, the AAD token can be used to authenticate into a Databricks provider and provision a personal access token (PAT) for the service principal.
 
 ## Usage
@@ -106,6 +106,59 @@ resource "databricks_git_credential" "prod_git" {
 }
 ```
 
+### Usage example with [MLOps Azure Infrastructure Module with Service Principal Linking](https://registry.terraform.io/modules/databricks/mlops-azure-infrastructure-with-sp-linking/databricks/latest)
+```hcl
+provider "databricks" {
+  alias = "dev"    # Authenticate using preferred method as described in Databricks provider
+}
+
+provider "databricks" {
+  alias = "staging"     # Authenticate using preferred method as described in Databricks provider
+}
+
+provider "databricks" {
+  alias = "prod"     # Authenticate using preferred method as described in Databricks provider
+}
+
+module "mlops_azure_infrastructure_with_sp_linking" {
+  source = "databricks/mlops-azure-infrastructure-with-sp-linking/databricks"
+  providers = {
+    databricks.dev = databricks.dev
+    databricks.staging = databricks.staging
+    databricks.prod = databricks.prod
+  }
+  staging_workspace_id          = "123456789"
+  prod_workspace_id             = "987654321"
+  azure_staging_client_id       = "k9l8m7n6o5-e5f6-g7h8-i9j0-a1b2c3d4p4"
+  azure_staging_client_secret   = var.azure_staging_client_secret     # This value is sensitive.
+  azure_staging_tenant_id       = "a1b2c3d4-e5f6-g7h8-i9j0-k9l8m7n6o5p4"
+  azure_prod_client_id          = "k9l8m7n6p4-e5f6-g7h8-i9j0-a1b2c3d4o5"
+  azure_prod_client_secret      = var.azure_prod_client_secret     # This value is sensitive.
+  azure_prod_tenant_id          = "a1b2c3d4-e5f6-g7h8-i9j0-k9l8m7n6o5p4"
+  additional_token_usage_groups = ["users"]     # This field is optional.
+}
+
+module "mlops_azure_project_with_sp_linking" {
+  source = "databricks/mlops-azure-project-with-sp-linking/databricks"
+  providers = {
+    databricks.staging = databricks.staging
+    databricks.prod = databricks.prod
+  }
+  service_principal_name      = "example-name"
+  project_directory_path      = "/dir-name"
+  azure_staging_client_id     = "k9l8m7n6o5-e5f6-g7h8-i9j0-a1b2c3d4p4"
+  azure_staging_client_secret = var.azure_staging_client_secret     # This value is sensitive.
+  azure_staging_tenant_id     = "a1b2c3d4-e5f6-g7h8-i9j0-k9l8m7n6o5p4"
+  azure_prod_client_id        = "k9l8m7n6p4-e5f6-g7h8-i9j0-a1b2c3d4o5"
+  azure_prod_client_secret    = var.azure_prod_client_secret     # This value is sensitive.
+  azure_prod_tenant_id        = "a1b2c3d4-e5f6-g7h8-i9j0-k9l8m7n6o5p4"
+  service_principal_group_name = module.mlops_azure_infrastructure_with_sp_linking.service_principal_group_name 
+  # The above field is optional, especially since in this case service_principal_group_name will be mlops-service-principals either way, 
+  # but this also serves to create an implicit dependency. Can also be replaced with the following line to create an explicit dependency:
+  # depends_on             = [module.mlops_azure_infrastructure_with_sp_linking]
+}
+```
+
 ## Requirements
 | Name | Version |
 |------|---------|
@@ -126,6 +179,7 @@ resource "databricks_git_credential" "prod_git" {
 |azure_prod_aad_token|The AAD token of the service principal in the prod workspace. This will need to be manually refreshed once it expires (often within several minutes). NOTE: Only this or both `azure_prod_client_secret` & `azure_prod_tenant_id` need to be provided.|string|null|no|
 |azure_prod_client_secret|The client secret of the AAD service principal in the prod workspace. NOTE: If `azure_prod_aad_token` is not provided, this and `azure_prod_tenant_id` must be provided to generate an AAD token.|string|null|no|
 |azure_prod_tenant_id|The tenant ID of the AAD service principal in the prod workspace. NOTE: If `azure_prod_aad_token` is not provided, this and `azure_prod_client_secret` must be provided to generate an AAD token.|string|null|no|
+|service_principal_group_name|The name of the service principal group in the staging and prod workspace. The created service principals will be added to this group.|string|`"mlops-service-principals"`|no|
 
 ## Outputs
 | Name | Description | Type | Sensitive |
