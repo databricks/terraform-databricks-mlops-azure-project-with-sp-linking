@@ -59,3 +59,9 @@ variable "azure_prod_tenant_id" {
   default     = null
   nullable    = true
 }
+
+variable "service_principal_group_name" {
+  type        = string
+  description = "The name of the service principal group in the staging and prod workspace. The created service principals will be added to this group."
+  default     = "mlops-service-principals"
+}
